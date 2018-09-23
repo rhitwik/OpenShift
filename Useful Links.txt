@@ -1,0 +1,12 @@
+kubernetes:
+https://www.katacoda.com/courses/kubernetes
+Link: https://www.youtube.com/watch?v=F-p_7XaEC84&list=PL9ooVrP1hQOF907pPru97cKY9nKwOrDTP
+https://kubernetes.io/docs/setup/independent/install-kubeadm/
+https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/
+
+
+Docker:
+https://www.katacoda.com/courses/docker
+https://docs.docker.com/samples/#tutorial-labs
+https://www.katacoda.com/courses/docker/deploying-first-container
+
