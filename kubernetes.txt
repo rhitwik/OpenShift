@@ -1,0 +1,162 @@
+
+
+#########################################################
+##########         Begin     #############
+#########################################################
+
+//change hostnames
+hostnamectl set-hostname matser   //set hostname
+hostnamectl set-hostname node01   //set hostname
+
+
+//On all master and nodes
+# install updates
+
+yum update -y
+
+
+# install the following base packages
+
+yum install -y  wget git zile nano net-tools docker-1.13.1\
+
+				bind-utils iptables-services \
+
+				bridge-utils bash-completion \
+
+				kexec-tools sos psacct openssl-devel \
+
+				httpd-tools NetworkManager \
+
+				python-cryptography python2-pip python-devel  python-passlib
+
+#install epel
+
+yum -y install epel-release
+
+# Disable the EPEL repository globally so that is not accidentally used during later steps of the installation
+
+sed -i -e "s/^enabled=1/enabled=0/" /etc/yum.repos.d/epel.repo
+
+
+systemctl | grep "NetworkManager.*running" 
+
+if [ $? -eq 1 ]; then
+	
+systemctl start NetworkManager
+	
+systemctl enable NetworkManager
+
+fi
+
+swapoff -a
+
+//start Docker
+systemctl start docker.service
+systemctl enable docker.service
+
+//Install kube packages
+cat <<EOF > /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
+enabled=1
+gpgcheck=1
+repo_gpgcheck=1
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+exclude=kube*
+EOF
+setenforce 0
+yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
+systemctl enable kubelet && systemctl start kubelet
+
+
+//set flags for IPTables
+cat <<EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sysctl --system
+
+#########################################################
+##########         Deploy kubernetes           ##########
+#########################################################
+
+//on Master
+sudo kubeadm init --pod-network-cidr=<> --apiserver-advertise-address=<ip-address-of-master>
+//For starting a Calico CNI: 192.168.0.0/16 or For starting a Flannel CNI: 10.244.0.0/16
+
+//Returned this below -->>
+
+Your Kubernetes master has initialized successfully!
+
+To start using your cluster, you need to run the following as a regular user:
+
+  mkdir -p $HOME/.kube
+  sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+  sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+You should now deploy a pod network to the cluster.
+Run "kubectl apply -f [podnetwork].yaml" with one of the options listed at:
+  https://kubernetes.io/docs/concepts/cluster-administration/addons/
+
+You can now join any number of machines by running the following on each node
+as root:
+
+  kubeadm join 192.168.0.106:6443 --token w3oynv.rfi6547xbaqo3xyd --discovery-token-ca-cert-hash sha256:976a667ff82d5ddba0eb41b9926aa633cd33233dd00fc6a6353d9cc82bfa2720
+
+################## create the POD NETWORK and DASHBOARD using PROXY ###################
+
+//Run the following commands as mentioned by init kubeadm init command
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+//For creating a POD based on Calico
+kubectl apply -f https://docs.projectcalico.org/v3.0/getting-started/kubernetes/installation/hosted/kubeadm/1.7/calico.yaml
+
+//For creating the dashboard first - brings this service up before starting nodes
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/recommended/kubernetes-dashboard.yaml
+
+//To enable proxy and continues with new terminal window
+kubectl proxy
+
+####### Create a SERVICE ACCOUNT  ######################################################
+//To create a service account for your dashboard
+kubectl create serviceaccount dashboard -n default
+
+//To add cluster binding rules for us roles on dashboard
+kubectl create clusterrolebinding dashboard-admin -n default \
+ --clusterrole=cluster-admin \
+ --serviceaccount=default:dashboard
+
+//Goto for accessing the dashboard
+https://localhost:8001/api/v1/namespaces/kube-system/services/https:kubernetes-dashboard:/proxy/
+
+//To get the secret key to be pasted into the dashboard token pwd. Copy the outcomingsecret key
+kubectl get secret $(kubectl get serviceaccount dashboard -o jsonpath="{.secret[0].name}") -o jsonpath="{.data.token}" | base64 --decode
+
+
+
+####### JOIN NODES to MASTER
+//On nodes run the Join command that was obtained on 'kubeadmn init' Replace the ip with that of Master's, token and discovery flags from below line
+kubeadm join 192.168.0.106:6443 --token w3oynv.rfi6547xbaqo3xyd --discovery-token-ca-cert-hash sha256:976a667ff82d5ddba0eb41b9926aa633cd33233dd00fc6a6353d9cc82bfa2720
+
+
+#########################################################
+##########     Monitor cluster                 ##########
+#########################################################
+
+kubectl get nodes                             // status of Nodes
+kubectl get pods --all-namespaces             // status of PODs
+kubectl get -o wide pods --all-namespaces     // detailed status of PODs
+
+
+
+
+
+
+
+
+
+
+
