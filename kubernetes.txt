@@ -48,13 +48,16 @@ systemctl enable NetworkManager
 
 fi
 
+//Ensure swap is off and comment in fstab
+#### step1:
+vi /etc/fstab
+<disable swap line > /dev/mapper... swap
+<save exit>
+#### step2:
 swapoff -a
 
-//start Docker
-systemctl start docker.service
-systemctl enable docker.service
 
-//Install kube packages
+//Install kube packages and enable
 cat <<EOF > /etc/yum.repos.d/kubernetes.repo
 [kubernetes]
 name=Kubernetes
@@ -67,15 +70,16 @@ exclude=kube*
 EOF
 setenforce 0
 yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
-systemctl enable kubelet && systemctl start kubelet
 
+//Start docker and kubelet service
+for i in kubelet docker; do systemctl start $i; systemctl enable $i;systemctl status $i; done
 
-//set flags for IPTables
+//Enable IP forwarding or iptables. Update below lines in /etc/sysctl.conf and in /etc/sysctl.d/k8s.conf
 cat <<EOF >  /etc/sysctl.d/k8s.conf
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
 EOF
-sysctl --system
+sysctl -p --system
 
 #########################################################
 ##########         Deploy kubernetes           ##########
@@ -142,13 +146,26 @@ kubectl get secret $(kubectl get serviceaccount dashboard -o jsonpath="{.secret[
 kubeadm join 192.168.0.106:6443 --token w3oynv.rfi6547xbaqo3xyd --discovery-token-ca-cert-hash sha256:976a667ff82d5ddba0eb41b9926aa633cd33233dd00fc6a6353d9cc82bfa2720
 
 
+####### Configure flannel networking for your docker containner
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+
+####### to check if the flannel is ready-
+ip a #flannel interface is ready
+
+
 #########################################################
 ##########     Monitor cluster                 ##########
 #########################################################
 
-kubectl get nodes                             // status of Nodes
-kubectl get pods --all-namespaces             // status of PODs
-kubectl get -o wide pods --all-namespaces     // detailed status of PODs
+kubectl get nodes                              # status of Nodes
+kubectl get nodes -o wide 		       # to get more wide options
+kubectl get pods --all-namespaces              # status of PODs
+kubectl get pods -o wide  --all-namespaces     # detailed status of PODs
+watch -n1 docker images                        # will check images every 1 second	
+
+#for final check of images and containers =
+docker images
+docker ps
 
 
 
